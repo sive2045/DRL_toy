@@ -3,7 +3,6 @@ from gym import spaces
 import numpy as np
 import random
 import matplotlib.pyplot as plt
-from matplotlib.patches import RegularPolygon
 
 class WirelessCommunicationEnv(gym.Env):
     def __init__(self):
@@ -12,7 +11,7 @@ class WirelessCommunicationEnv(gym.Env):
         self.area_side = 10  # 구역 한 변의 길이 (10km)
         self.num_base_stations = 10  # 기지국 개수
         self.base_station_radius = 3  # 기지국 셀 반경 (3km)
-        self.user_speed = 60  # 시속 60km
+        self.user_speed = 80  # 시속 80km
         self.total_time = 600  # 10분 (600초)
         self.time_interval = 1  # 1초 간격
 
@@ -22,13 +21,21 @@ class WirelessCommunicationEnv(gym.Env):
         self.current_time = 0
 
         self.action_space = spaces.Discrete(self.num_base_stations)  # 기지국 선택
-        self.observation_space = spaces.Discrete(self.num_base_stations + 1)  # 유저 위치 및 통신 기지국
+        # 관측 상태: 통신 중인 BS와 BS의 SINR
+        self.observation_space = spaces.Dict(
+            {
+                "observation": spaces.Box(
+                    low=0, high=1, shape=(2, self.num_base_stations), dtype=np.int8
+                )
+            }
+        )
 
     def reset(self):
         self.user_x = random.uniform(0, self.area_side)
         self.user_y = random.uniform(0, self.area_side)
         self.current_time = 0
-        return self.num_base_stations  # 초기 상태는 기지국을 선택하지 않음을 나타냄
+        info = [self.user_x, self.user_y]
+        return self.num_base_stations, info  # 초기 상태는 기지국을 선택하지 않음을 나타냄
 
     def step(self, action):
         self.current_time += self.time_interval
@@ -106,21 +113,23 @@ class WirelessCommunicationEnv(gym.Env):
         h = h_real + 1j * h_imag
         return h
 
-# Gym 환경 생성 및 테스트
-env = WirelessCommunicationEnv()
 
-for episode in range(5):
-    state = env.reset()
-    total_reward = 0
-    done = False
+if __name__ == '__main__':
+    # Gym 환경 생성 및 테스트
+    env = WirelessCommunicationEnv()
 
-    env.render()
-    while not done:
-        action = env.action_space.sample()  # 랜덤 액션 선택
-        next_state, reward, done, _ = env.step(action)
-        total_reward += reward
-    env.render()
+    for episode in range(5):
+        state = env.reset()
+        total_reward = 0
+        done = False
 
-    print(f"Episode {episode+1}, Total Reward: {total_reward}")
+        #env.render()
+        while not done:
+            action = env.action_space.sample()  # 랜덤 액션 선택
+            next_state, reward, done, _ = env.step(action)
+            total_reward += reward
+        #env.render()
 
-print("Done")
+        print(f"Episode {episode+1}, Total Reward: {total_reward}")
+
+    print("Done")
