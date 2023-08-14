@@ -30,12 +30,40 @@ class WirelessCommunicationEnv(gym.Env):
             }
         )
 
+    def _cal_SINR(self):
+        SINRs = np.zeros(self.num_base_stations)
+
+        for i in range(self.num_base_stations):
+            # channel gain
+            comm_station = self.base_stations[i]
+            distance = np.sqrt((self.user_x - comm_station[0])**2 + (self.user_y - comm_station[1])**2)
+            channel_quality = 1 / (distance**2)
+            fading_gain = abs(self.rayleigh_fading(channel_quality))
+
+            # 간섭 계산
+            interference = 0
+            for j, station in enumerate(self.base_stations):
+                if i != j:
+                    distance = np.sqrt((self.user_x - station[0])**2 + (self.user_y - station[1])**2)
+                    channel_quality = 1 / (distance**2)
+                    interference += abs(self.rayleigh_fading(channel_quality))
+
+            SINRs[i] = fading_gain / (interference + 1e-6)  # 간섭으로 인한 분모가 0이 되는 것을 방지
+        return SINRs
+
     def reset(self):
         self.user_x = random.uniform(0, self.area_side)
         self.user_y = random.uniform(0, self.area_side)
         self.current_time = 0
-        info = [self.user_x, self.user_y]
-        return self.num_base_stations, info  # 초기 상태는 기지국을 선택하지 않음을 나타냄
+        self.info = [self.user_x, self.user_y]
+        
+        # 초기 선택 BS는 없음
+        self.comm_indicator = np.zeros(self.num_base_stations)
+        self.SINRs = self._cal_SINR()
+        observation = (self.comm_indicator, self.SINRs)
+        self.observations["observation"] = observation
+
+        return self.observations, self.info  
 
     def step(self, action):
         self.current_time += self.time_interval
@@ -45,6 +73,8 @@ class WirelessCommunicationEnv(gym.Env):
 
         self.user_x += (self.user_speed * self.time_interval / 3600) * np.cos(np.radians(random.uniform(0, 360)))
         self.user_y += (self.user_speed * self.time_interval / 3600) * np.sin(np.radians(random.uniform(0, 360)))
+
+        self.SINRs = self._cal_SINR()
 
         selected_station = self.base_stations[action]
         distance = np.sqrt((self.user_x - selected_station[0])**2 + (self.user_y - selected_station[1])**2)
@@ -66,7 +96,9 @@ class WirelessCommunicationEnv(gym.Env):
         else:
             done = False
 
-        return action, reward, done, {}
+        self.observations["observation"] = (selected_station, self.SINRs)
+
+        return self.observations, reward, done, _, self.info
 
     def render(self):
         plt.figure(figsize=(6, 6))
