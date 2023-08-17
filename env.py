@@ -5,8 +5,10 @@ import random
 import matplotlib.pyplot as plt
 
 class WirelessCommunicationEnv(gym.Env):
-    def __init__(self):
+    def __init__(self, debugging=False):
         super(WirelessCommunicationEnv, self).__init__()
+
+        self.debugging = debugging
 
         self.area_side = 10  # 구역 한 변의 길이 (10km)
         self.num_base_stations = 10  # 기지국 개수
@@ -58,9 +60,10 @@ class WirelessCommunicationEnv(gym.Env):
         self.info = [self.user_x, self.user_y]
         
         # 초기 선택 BS는 없음
-        self.comm_indicator = np.zeros(self.num_base_stations)
+        self.comm_indicator = -1
         self.SINRs = self._cal_SINR()
         observation = (self.comm_indicator, self.SINRs)
+        self.observations = {}
         self.observations["observation"] = observation
 
         return self.observations, self.info  
@@ -96,11 +99,18 @@ class WirelessCommunicationEnv(gym.Env):
         else:
             done = False
 
-        self.observations["observation"] = (selected_station, self.SINRs)
+        self.observations["observation"] = (action, self.SINRs)
 
-        return self.observations, reward, done, _, self.info
+        if self.debugging:
+            print(f"현재 time step: {self.current_time}")
+            print(f"선택 기지국: {self.observations['observation'][0]}")
+            print(f"SINRs: {self.observations['observation'][1]}")
+            self.render(action)
 
-    def render(self):
+        truncated = False
+        return self.observations, reward, done, truncated, self.info
+
+    def render(self, action):
         plt.figure(figsize=(6, 6))
         
         # 기지국 그리기
@@ -110,7 +120,6 @@ class WirelessCommunicationEnv(gym.Env):
             plt.scatter(station[0], station[1], color='blue', marker='*', s=30)
         
         # 유저와 통신 중인 기지국 연결선 그리기
-        action, _, _, _ = self.step(self.action_space.sample())
         selected_station = self.base_stations[action]
         plt.plot([self.user_x, selected_station[0]], [self.user_y, selected_station[1]], color='black', linestyle='solid')
         plt.scatter(self.user_x, self.user_y, color='red', marker='o', s=30)
@@ -148,19 +157,17 @@ class WirelessCommunicationEnv(gym.Env):
 
 if __name__ == '__main__':
     # Gym 환경 생성 및 테스트
-    env = WirelessCommunicationEnv()
+    env = WirelessCommunicationEnv(debugging=True)
 
     for episode in range(5):
         state = env.reset()
         total_reward = 0
         done = False
 
-        #env.render()
         while not done:
             action = env.action_space.sample()  # 랜덤 액션 선택
-            next_state, reward, done, _ = env.step(action)
+            obs, reward, done, _, info = env.step(action)
             total_reward += reward
-        #env.render()
 
         print(f"Episode {episode+1}, Total Reward: {total_reward}")
 
