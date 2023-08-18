@@ -1,20 +1,20 @@
 import gym
-from gym import spaces
+from gym.spaces import Box, Discrete, Dict
 import numpy as np
 import random
 import matplotlib.pyplot as plt
 
 class WirelessCommunicationEnv(gym.Env):
-    def __init__(self, debugging=False):
+    def __init__(self, env_config):
         super(WirelessCommunicationEnv, self).__init__()
-
-        self.debugging = debugging
+        
+        self.debugging = env_config['debugging']
 
         self.area_side = 10  # 구역 한 변의 길이 (10km)
         self.num_base_stations = 10  # 기지국 개수
         self.base_station_radius = 3  # 기지국 셀 반경 (3km)
-        self.user_speed = 80  # 시속 80km
-        self.total_time = 600  # 10분 (600초)
+        self.user_speed = 300  # 시속 300km
+        self.total_time = 300  # 5분 (600초)
         self.time_interval = 1  # 1초 간격
 
         self.base_stations = self.generate_uniform_grid_samples()
@@ -22,12 +22,12 @@ class WirelessCommunicationEnv(gym.Env):
         self.user_y = None
         self.current_time = 0
 
-        self.action_space = spaces.Discrete(self.num_base_stations)  # 기지국 선택
+        self.action_space = Discrete(self.num_base_stations)  # 기지국 선택
         # 관측 상태: 통신 중인 BS와 BS의 SINR
-        self.observation_space = spaces.Dict(
+        self.observation_space = Dict(
             {
-                "observation": spaces.Box(
-                    low=0, high=1, shape=(2, self.num_base_stations), dtype=np.int8
+                "observation": Box(
+                    low=0, high=1, shape=(2, self.num_base_stations), dtype=np.float32
                 )
             }
         )
@@ -62,9 +62,9 @@ class WirelessCommunicationEnv(gym.Env):
         # 초기 선택 BS는 없음
         self.comm_indicator = -1
         self.SINRs = self._cal_SINR()
-        observation = (self.comm_indicator, self.SINRs)
-        self.observations = {}
-        self.observations["observation"] = observation
+        observation = np.append(self.comm_indicator, self.SINRs)
+        self.observations = observation
+        #self.observations["observation"] = observation
 
         return self.observations, self.info  
 
@@ -74,52 +74,48 @@ class WirelessCommunicationEnv(gym.Env):
         user_x_before = self.user_x
         user_y_before = self.user_y
 
-        self.user_x += (self.user_speed * self.time_interval / 3600) * np.cos(np.radians(random.uniform(0, 360)))
-        self.user_y += (self.user_speed * self.time_interval / 3600) * np.sin(np.radians(random.uniform(0, 360)))
+        self.user_x += (self.user_speed * self.time_interval / 3600) *  random.choice([-1, 0, 1])
+        self.user_y += (self.user_speed * self.time_interval / 3600) *  random.choice([-1, 0, 1])
+        if self.user_x > 10 or self.user_x < 0:
+            self.user_x = user_x_before
+        if self.user_y > 10 or self.user_y < 0:
+            self.user_y = user_y_before
+        self.info = [self.user_x, self.user_y]
 
         self.SINRs = self._cal_SINR()
-
-        selected_station = self.base_stations[action]
-        distance = np.sqrt((self.user_x - selected_station[0])**2 + (self.user_y - selected_station[1])**2)
-        channel_quality = 1 / (distance**2)
-        fading_gain = abs(self.rayleigh_fading(channel_quality))
-
-        interference = 0
-        for i, station in enumerate(self.base_stations):
-            if i != action:
-                distance = np.sqrt((self.user_x - station[0])**2 + (self.user_y - station[1])**2)
-                channel_quality = 1 / (distance**2)
-                interference += abs(self.rayleigh_fading(channel_quality))
-
-        sinr = fading_gain / (interference + 1e-6)  # 간섭으로 인한 분모가 0이 되는 것을 방지
-        reward = sinr
+        sinr = self.SINRs[action]
+        
+        if sinr == self.SINRs.max():
+            reward = 1
+        else:
+            reward = 0
 
         if self.current_time >= self.total_time:
             done = True
         else:
             done = False
 
-        self.observations["observation"] = (action, self.SINRs)
+        observation = np.append(self.comm_indicator, self.SINRs)
+        self.observations = observation
 
         if self.debugging:
             print(f"현재 time step: {self.current_time}")
-            print(f"선택 기지국: {self.observations['observation'][0]}")
-            print(f"SINRs: {self.observations['observation'][1]}")
+            print(f"선택 기지국: {action}")
+            print(f"SINRs: {observation[1:]}")
             self.render(action)
 
         truncated = False
         return self.observations, reward, done, truncated, self.info
 
     def render(self, action):
-        plt.figure(figsize=(6, 6))
-        
+        plt.clf() 
         # 기지국 그리기
         for station in self.base_stations:
             circle = plt.Circle((station[0], station[1]), self.base_station_radius, color='gray', fill=False, linestyle='dotted')
             plt.gca().add_artist(circle)
             plt.scatter(station[0], station[1], color='blue', marker='*', s=30)
         
-        # 유저와 통신 중인 기지국 연결선 그리기
+        # 유저와 통신 중인 기지국 연결선 그리기 
         selected_station = self.base_stations[action]
         plt.plot([self.user_x, selected_station[0]], [self.user_y, selected_station[1]], color='black', linestyle='solid')
         plt.scatter(self.user_x, self.user_y, color='red', marker='o', s=30)
@@ -127,7 +123,7 @@ class WirelessCommunicationEnv(gym.Env):
         plt.xlim(0, self.area_side)
         plt.ylim(0, self.area_side)
         plt.gca().set_aspect('equal', adjustable='box')
-        plt.show()
+        plt.pause(0.001)  # 잠시 멈추어 그래프 업데이트
 
     def generate_uniform_grid_samples(self):
         """
@@ -157,7 +153,10 @@ class WirelessCommunicationEnv(gym.Env):
 
 if __name__ == '__main__':
     # Gym 환경 생성 및 테스트
-    env = WirelessCommunicationEnv(debugging=True)
+    env_config = {
+        'debugging': True,
+    }
+    env = WirelessCommunicationEnv(env_config)
 
     for episode in range(5):
         state = env.reset()
