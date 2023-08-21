@@ -258,6 +258,6 @@ def run(path, test_mode):
 
 if __name__ == '__main__':
     path = '.\DQN_model.pth'
-    test_mode = True
+    test_mode = True # True: 모델 평가, False: 학습
 
     run(path=path, test_mode=test_mode)

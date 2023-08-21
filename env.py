@@ -50,7 +50,7 @@ class WirelessCommunicationEnv(gym.Env):
                     channel_quality = 1 / (distance**2)
                     interference += abs(self.rayleigh_fading(channel_quality))
 
-            SINRs[i] = fading_gain / (interference + 1e-6)  # 간섭으로 인한 분모가 0이 되는 것을 방지
+            SINRs[i] = fading_gain / (interference + 1e-6)  # noise: 1e-6 가정
         return SINRs
 
     def reset(self):
@@ -145,6 +145,9 @@ class WirelessCommunicationEnv(gym.Env):
 
 
     def rayleigh_fading(self, channel_quality):
+        '''
+        거리에 비례하여 표준편차 설정
+        '''
         h_real = np.random.normal(0, np.sqrt(channel_quality / 2))
         h_imag = np.random.normal(0, np.sqrt(channel_quality / 2))
         h = h_real + 1j * h_imag
@@ -158,7 +161,7 @@ if __name__ == '__main__':
     }
     env = WirelessCommunicationEnv(env_config)
 
-    for episode in range(5):
+    for episode in range(1):
         state = env.reset()
         total_reward = 0
         done = False
